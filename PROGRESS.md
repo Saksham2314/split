@@ -1,12 +1,12 @@
 # SplitSmart — Progress Tracker
 
-_Last updated: 2026-10-20_
+_Last updated: 2026-10-21_
 
 Legend: ✅ Implemented & verified · 🟡 Implemented, not yet verified · 📄 Documented only · ⛔ Blocked
 
 ## Current phase
-**Phase 2 — Docker.** Done and verified locally. The full stack (Postgres → migrate job → API → Caddy) runs from
-`deploy/docker-compose.prod.yml` with hardened containers. Next: **Phase 3, AWS + Terraform** (needs your AWS account).
+**Phases 3–4 done: SplitSmart is live at https://13-54-188-209.sslip.io** (EC2 `t3.micro`, Sydney, AWS Free plan credits).
+Created and deployed with the AWS CLI scripts in `deploy/aws/` (no Terraform, ADR-021). Next: Phase 5, CI (Jenkins).
 
 ## Phase status
 
@@ -15,12 +15,33 @@ Legend: ✅ Implemented & verified · 🟡 Implemented, not yet verified · 📄
 | 0 Discovery & setup | ✅ Done | Commits `f5f62cd`, `2d09f88` pushed |
 | 1 Local application | ✅ Done | Commit `120e879` pushed |
 | 2 Docker | ✅ Done | Verified locally (see checklist) |
-| 3 AWS + Terraform | ⏳ Not started | Terraform, AWS CLI, AWS account not set up |
-| 4 Deploy to EC2 | ⏳ Not started | |
+| 3 AWS server | ✅ Done | `i-0334e62541a7e45f1`, EIP 13.54.188.209, ap-southeast-2. Terraform dropped (ADR-021) |
+| 4 Deploy to EC2 | ✅ Done | Built on the server from GitHub `main`; Let's Encrypt HTTPS |
 | 5 Jenkins CI | ⏳ Not started | |
 | 6 CD + rollback | ⏳ Not started | |
 | 7 Security & ops | ⏳ Not started | |
 | 8 Final review | ⏳ Not started | |
+
+## Phase 3–4 checklist (verified 2026-10-21 against the live server)
+
+| Item | Status |
+|---|---|
+| Identity is IAM user `splitsmart-admin` (AdministratorAccess), not root | ✅ |
+| Region: SCP allows EC2 only in ap-southeast-2; scripts use it | ✅ |
+| Free plan: $100 credits until 2027-04-20; `t3.micro` free-tier eligible | ✅ |
+| Budget `splitsmart-monthly`: usage before credits > 80% of $15, or forecast > $15 | ✅ created |
+| Security group: 80/443 only; 22, 3000, 5432 unreachable from internet | ✅ probed |
+| sshd masked on host (cloud-init started it even when disabled) | ✅ inactive after reboot fix |
+| IMDSv2 only (IMDSv1 returns 401), hop limit 1 | ✅ |
+| Bootstrap: Docker 25, Compose v5.6.0 + buildx v0.37.2 (SHA-256 verified), 2 GB swap, dnf-automatic | ✅ |
+| Deploy via SSM: clone `main`, build on host, db → migrate → api → web all healthy | ✅ |
+| HTTPS: Let's Encrypt cert for 13-54-188-209.sslip.io (valid to 2027-01-18, auto-renew); HTTP → 308 → HTTPS | ✅ |
+| Security headers + cookie `HttpOnly; Secure; SameSite=Lax` | ✅ |
+| Headless-Chrome flow against the live URL: renders, animates, no CSP violations | ✅ |
+| Reboot: containers come back on their own in ~30 s; data intact | ✅ |
+| Secrets generated on the server, `/opt/splitsmart/.env` mode 600 | ✅ |
+| Login brute-force limit active (429 after ~20 attempts / 15 min) | ✅ |
+| Test data on prod: user `smoke-test-…@example.com` with a "Smoke test" group | ℹ️ left in place (no delete-user feature) |
 
 ## Phase 2 checklist
 
@@ -72,7 +93,11 @@ Legend: ✅ Implemented & verified · 🟡 Implemented, not yet verified · 📄
 - [x] Commit Phase 1
 - [x] Push Phase 1
 - [x] Phase 2: images, prod compose, verification
-- [ ] **You (Phase 3):** create an AWS account (if needed), install the AWS CLI + Terraform
+- [x] AWS CLI 2.38.1 installed (Terraform installed but no longer used)
+- [x] IAM user + access key configured (`aws configure`)
+- [x] `create-server.sh`, `deploy.sh`, live verification
+- [ ] **You (recommended):** add MFA to `splitsmart-admin` and the root user
+- [ ] Phase 5: CI pipeline
 
 ## Test results (2026-10-20)
 - `apps/api` unit: **12/12 passed**
@@ -83,7 +108,9 @@ Legend: ✅ Implemented & verified · 🟡 Implemented, not yet verified · 📄
 `120e879` feat: Phase 1 app with animated UI and Google sign-in (pushed). Phase 2 commit follows.
 
 ## Deployment status
-No cloud resources exist. **Current AWS spend from this project: USD 0.**
+Live: https://13-54-188-209.sslip.io — EC2 `i-0334e62541a7e45f1` (t3.micro), EIP 13.54.188.209, ap-southeast-2.
+**Out-of-pocket cost: USD 0** (Free plan; ≈ USD 13/month of the $100 credits). `bash deploy/aws/destroy-server.sh` removes it all.
 
 ## Blockers / manual actions
-None. (WSL 2 installed; Docker engine running.)
+None blocking. Recommended: MFA on `splitsmart-admin` (the CLI uses a long-lived access key; rotate it if it ever leaks:
+IAM → Users → splitsmart-admin → Security credentials).

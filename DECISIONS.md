@@ -164,3 +164,24 @@ superseded ones are marked, not deleted. "Proposed" means agreed in planning but
   runtime image. CSP allows `'unsafe-inline'` **styles only**, because Motion animates via inline style attributes. Scripts stay `'self'`.
 - **Known gaps:** base images pinned by tag, not digest (Phase 5 adds Trivy scanning and SHA-tagged app images).
   Deleting npm doesn't shrink the image, because the files still exist in the base layer.
+
+## ADR-021 — No Terraform: AWS CLI scripts, default VPC, build on the server, secrets on the server
+- **Status:** Accepted (Phase 3), at your request: no Terraform, the site should be free.
+  **Supersedes** ADR-008 (dedicated VPC), ADR-011 (Parameter Store), ADR-014 (Terraform state). Changes ADR-012 for now (no registry).
+- **Decision:** `deploy/aws/create-server.sh` creates the server with the AWS CLI, re-runnable, finding existing pieces by tag.
+  It uses a $1 "any spend" budget, the **default VPC**, a security group with only 80/443 open, an IAM role with
+  `AmazonSSMManagedInstanceCore` (plus an explicit Deny on Parameter Store reads), and one free-tier-checked `t3.micro`
+  (Amazon Linux 2023, IMDSv2 with hop limit 1, `standard` CPU credits, encrypted 20 GB gp3) behind an Elastic IP.
+  `deploy.sh` sends `remote-deploy.sh` through SSM Run Command. The server clones the public repo at a branch or commit,
+  builds the images **on the instance** and restarts the Compose stack. Secrets are generated on the server on first deploy and never leave it.
+- **Kept from the original plan:** no SSH (SSM only), Caddy HTTPS on `<ip>.sslip.io`, hardened containers, migrations gating the API.
+- **Trade-offs:** infrastructure is no longer declared, diffable or reviewable as code (the scripts are imperative, and
+  idempotent only for the pieces they check). Building on a 1 GiB instance is slow (minutes) and briefly competes with the
+  running app for memory. Secrets exist only on the server's disk, so losing the server loses them, along with the database
+  (it lives on the same volume). Backups remain a Phase 7 item.
+- **Region and cost, as found on the real account:** the account (`304588611846`) is a member of the user's own
+  AWS Organization, whose SCP allows EC2 only in **ap-southeast-2**. That supersedes ADR-013 (Mumbai). It's on the
+  **Free plan** ($100 credits, expires 2027-04-20, can't be charged). The budget therefore sets `IncludeCredit=false`:
+  with credits included it would always read $0 and never alert. It warns at 80 % of $15/month actual or 100 % forecast.
+- **Also:** `sshd` is disabled on the host (port 22 is also closed in the security group), as defence in depth. Destroying
+  with `destroy-server.sh` removes everything that uses credits.

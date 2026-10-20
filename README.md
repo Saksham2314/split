@@ -44,6 +44,20 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down    
 ```
 Start-up order: `db` (healthy) → `migrate` (applies SQL migrations, exits) → `api` (healthy) → `web` (Caddy on ports 80/443).
 
+## Deploy to AWS (free tier, no Terraform)
+Three scripts in [`deploy/aws/`](deploy/aws/), run from Git Bash after `aws login` (see PROGRESS.md):
+```bash
+bash deploy/aws/create-server.sh you@example.com   # budget alert + firewall + IAM role + free-tier EC2 + Elastic IP (Sydney)
+bash deploy/aws/deploy.sh                          # server pulls this repo, builds, starts; HTTPS via sslip.io
+bash deploy/aws/destroy-server.sh                  # deletes the server and its data; stops all charges
+```
+- **No SSH:** port 22 is closed. Shell access is `aws ssm start-session --target <instance-id>`.
+- **Secrets** (DB password, JWT secret) are generated on the server at first deploy, in a root-only `/opt/splitsmart/.env`.
+- **Region:** `ap-southeast-2` (Sydney). The account's organization guardrail (an SCP) blocks EC2 in every other region.
+- **Cost:** the account is on the AWS **Free plan** ($100 credits until 2027-04-20; it can't be billed). The server uses
+  roughly $13/month of credits. A budget emails you if usage *before credits* passes 80% of $15 in a month.
+  `create-server.sh` refuses to launch an instance type that isn't free-tier eligible.
+
 ## Quick start (local development, Windows PowerShell)
 
 Prerequisites: Node.js 20+, Docker Desktop (running).
