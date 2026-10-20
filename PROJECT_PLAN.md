@@ -87,7 +87,7 @@ EKS (~USD 73 control plane), Secrets Manager per-secret fees.
 
 | Risk | Mitigation |
 |---|---|
-| Project lives in a **OneDrive-synced** folder: syncing `node_modules`, file locks, slow Docker bind mounts | Recommend moving to `C:\dev\splitsmart` before Phase 1 (just move the folder; git history moves with it) |
+| ~~Project in a OneDrive-synced folder~~ | Resolved 2026-10-20: moved to `C:\dev\splitsmart` |
 | Secrets leak to Git | `.gitignore`, `.env.example` only, pre-commit review of every diff, secret scan in Phase 8 |
 | Surprise AWS bill | Budget alerts, no NAT/ALB, explicit approval before every `apply`, teardown guide |
 | Losing Terraform state | Keep backups of `terraform.tfstate`; document S3 remote state |

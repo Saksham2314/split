@@ -36,18 +36,17 @@ _Last updated: 2026-10-20_
 - [x] Git identity set repo-locally (`git config user.name` / `user.email`); change it if you prefer
 - [x] GitHub repo created: `Saksham2314/split`
 - [x] First commit + push (`chore: initialize project structure and planning docs`)
-- [ ] You (before Phase 2): install Docker Desktop
-- [ ] Recommended: move project out of OneDrive to `C:\dev\splitsmart`
+- [x] Moved project out of OneDrive to `C:\dev\splitsmart` (2026-10-20)
+- [ ] You (before Phase 1 DB work): install Docker Desktop
 
 ## Test results
 _None yet (no code in Phase 0)._
 
 ## Last verified commit
-_None yet._
+`f5f62cd` chore: initialize project structure and planning docs (pushed, matches `origin/main`)
 
 ## Deployment status
 No cloud resources exist. **Current AWS spend from this project: USD 0.**
 
 ## Blockers / manual actions
 - Install **Docker Desktop** before Phase 2: `winget install -e --id Docker.DockerDesktop` (then restart).
-- Recommended: move the project out of OneDrive to `C:\dev\splitsmart`.
