@@ -5,8 +5,9 @@ _Last updated: 2026-10-21_
 Legend: ✅ Implemented & verified · 🟡 Implemented, not yet verified · 📄 Documented only · ⛔ Blocked
 
 ## Current phase
-**Phases 3–4 done: SplitSmart is live at https://13-54-188-209.sslip.io** (EC2 `t3.micro`, Sydney, AWS Free plan credits).
-Created and deployed with the AWS CLI scripts in `deploy/aws/` (no Terraform, ADR-021). Next: Phase 5, CI (Jenkins).
+**Phases 0–5 done. SplitSmart is live at https://13-54-188-209.sslip.io** (EC2 `t3.micro`, Sydney, AWS Free plan credits),
+running `9071ad8`, which passed the Jenkins pipeline. Release = push → green Jenkins build → `deploy.sh <sha>`; rollback = deploy an earlier SHA.
+Remaining (optional): automated CD from Jenkins, Phase 7 (CloudWatch logs/alarms, pg_dump backups to S3), Phase 8 review.
 
 ## Phase status
 
@@ -17,10 +18,23 @@ Created and deployed with the AWS CLI scripts in `deploy/aws/` (no Terraform, AD
 | 2 Docker | ✅ Done | Verified locally (see checklist) |
 | 3 AWS server | ✅ Done | `i-0334e62541a7e45f1`, EIP 13.54.188.209, ap-southeast-2. Terraform dropped (ADR-021) |
 | 4 Deploy to EC2 | ✅ Done | Built on the server from GitHub `main`; Let's Encrypt HTTPS |
-| 5 Jenkins CI | ⏳ Not started | |
-| 6 CD + rollback | ⏳ Not started | |
+| 5 Jenkins CI | ✅ Done | Local Jenkins (CasC), polling `main`; Trivy gate caught and fixed 6 HIGH CVEs |
+| 6 CD + rollback | 🟡 Manual | `deploy.sh <sha>` of a CI-green commit; rollback = deploy an earlier SHA (history on the server). Jenkins doesn't deploy automatically (that would need AWS keys inside Jenkins) |
 | 7 Security & ops | ⏳ Not started | |
 | 8 Final review | ⏳ Not started | |
+
+## Phase 5 checklist (Jenkins CI)
+
+| Item | Status |
+|---|---|
+| Jenkins 2.580.1 LTS in Docker, configured only from `jenkins/casc.yaml` (no setup wizard) | ✅ |
+| Bound to 127.0.0.1:8080; anonymous → 403, wrong password → 401; admin password is a git-ignored Docker secret | ✅ |
+| Runs as `jenkins` (uid 1000), joined to the Docker socket's group only | ✅ |
+| Job `splitsmart` created by Job DSL; polls `main` every 3 min | ✅ build triggered by polling after a push |
+| Pipeline: install → lint ∥ typecheck → unit → API tests on per-build Postgres → build → images → Trivy | ✅ |
+| JUnit results in Jenkins (12 + 26 + 23 tests) | ✅ |
+| Trivy gate failed build #2 on 6 HIGH CVEs (OpenSSL in Alpine; Go stdlib + x/net in Caddy) | ✅ fixed in `9071ad8`: `apk upgrade`; Caddy 2.11.7 rebuilt on Go 1.27.3 + x/net 0.60.0 |
+| Repo scan: no vulnerable npm deps, no committed secrets | ✅ |
 
 ## Phase 3–4 checklist (verified 2026-10-21 against the live server)
 
@@ -105,7 +119,7 @@ Created and deployed with the AWS CLI scripts in `deploy/aws/` (no Terraform, AD
 - `apps/api` API tests: **23/23 passed** (Postgres 16 in Docker)
 
 ## Last verified commit
-`120e879` feat: Phase 1 app with animated UI and Google sign-in (pushed). Phase 2 commit follows.
+`9071ad8` fix(docker): patch HIGH vulnerabilities found by the Trivy gate: **CI green (Jenkins #3) and live on the server** since 2026-10-20 20:08 UTC.
 
 ## Deployment status
 Live: https://13-54-188-209.sslip.io — EC2 `i-0334e62541a7e45f1` (t3.micro), EIP 13.54.188.209, ap-southeast-2.

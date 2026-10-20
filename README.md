@@ -68,7 +68,14 @@ node -e "process.stdout.write(require('crypto').randomBytes(18).toString('base64
 docker compose -f jenkins/docker-compose.yml up -d --build
 # http://localhost:8080  →  user: admin, password: the contents of jenkins/secrets/admin_password
 ```
-CI only runs while your PC (and Docker Desktop) is on. Deploys remain a deliberate step: `bash deploy/aws/deploy.sh <commit>`.
+CI only runs while your PC (and Docker Desktop) is on.
+
+### Release and rollback
+1. Push to `main` → Jenkins picks it up within 3 minutes → wait for a green build.
+2. `bash deploy/aws/deploy.sh <commit>`: deploy exactly the commit CI approved. If the build on the server fails,
+   the running containers are left untouched.
+3. **Rollback:** `bash deploy/aws/deploy.sh <earlier-commit>`. The server keeps a history in `/opt/splitsmart/deployments.log`,
+   printed after every deploy. Database migrations only move forward, so roll back code, not schema.
 
 ## Quick start (local development, Windows PowerShell)
 

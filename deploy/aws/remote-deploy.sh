@@ -39,13 +39,13 @@ printf 'SITE_ADDRESS=%s\nAPP_URL=https://%s\n' "$SITE_HOST" "$SITE_HOST" >> .env
 # --- build on the server, one image at a time (1 GiB RAM + swap), then swap containers ---
 C="docker compose -f src/deploy/docker-compose.prod.yml --env-file .env"
 for svc in api web; do
-  echo "Building $svc…"
+  echo "Building $svc..."
   if ! $C --progress plain build "$svc" > "build-$svc.log" 2>&1; then
     tail -n 60 "build-$svc.log"
     exit 1
   fi
 done
-echo "Starting containers…"
+echo "Starting containers..."
 $C up -d --no-build --remove-orphans --wait --wait-timeout 300
 $C ps --format 'table {{.Service}}\t{{.Status}}'
 docker image prune -f > /dev/null
@@ -55,6 +55,10 @@ for i in $(seq 1 24); do
   if curl -fsS --max-time 5 --resolve "$SITE_HOST:443:127.0.0.1" "https://$SITE_HOST/api/health"; then
     echo
     echo "OK: https://$SITE_HOST"
+    # Deployment history: roll back with `deploy.sh <an earlier commit from this list>`.
+    echo "$(date -u +%FT%TZ) $(git -C src rev-parse --short HEAD) $(git -C src log -1 --format=%s | cut -c1-60)" >> deployments.log
+    echo "Recent deployments:"
+    tail -n 5 deployments.log
     exit 0
   fi
   sleep 5
