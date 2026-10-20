@@ -1,0 +1,54 @@
+# ---------- Secrets (NEVER commit) ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+*.crt
+secrets/
+credentials
+.aws/
+
+# ---------- Terraform ----------
+# State contains resource IDs, IPs and sometimes secrets in plain text.
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfplan
+tfplan
+
+# ---------- Node / build output ----------
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+
+# ---------- Jenkins (local controller data) ----------
+jenkins_home/
+jenkins-data/
+
+# ---------- Logs & OS / editor noise ----------
+logs/
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json

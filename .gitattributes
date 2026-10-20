@@ -1,0 +1,8 @@
+# Store text files with LF endings in Git. Shell scripts and Dockerfiles run on
+# Linux (containers, EC2); CRLF endings from Windows break them ("bad interpreter").
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
