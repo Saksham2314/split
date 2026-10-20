@@ -185,3 +185,21 @@ superseded ones are marked, not deleted. "Proposed" means agreed in planning but
   with credits included it would always read $0 and never alert. It warns at 80 % of $15/month actual or 100 % forecast.
 - **Also:** `sshd` is disabled on the host (port 22 is also closed in the security group), as defence in depth. Destroying
   with `destroy-server.sh` removes everything that uses credits.
+
+## ADR-022 — Jenkins details: Configuration as Code, tools baked in, Docker socket, builds on the controller
+- **Status:** Accepted (Phase 5). Implements ADR-010; changes ADR-012 (no registry push, SHA tags used locally only).
+- **Decision:** a custom image `FROM jenkins/jenkins:2.580.1-lts-jdk21` with Node 24.18.0, Docker CLI 29.8.1 + buildx and
+  Trivy 0.75.0 copied in from their official images. Ten top-level plugins are pinned in `plugins.txt`, and dependencies
+  are resolved for that exact core. `casc.yaml` defines security (local admin user, no sign-up, no anonymous read,
+  CSRF on) and creates the `splitsmart` pipeline job via Job DSL, polling `main` every 3 minutes. The admin
+  password is a Docker secret file (git-ignored). No setup wizard and no UI configuration: rebuilding recreates Jenkins exactly.
+- **Pipeline:** every build gets its own Postgres container (`postgres:16.15-alpine`, tmpfs, on the `splitsmart-ci`
+  network), removed afterwards. JUnit reports feed Jenkins' test view. Images are tagged with the short commit SHA, scanned,
+  then deleted. Trivy fails the build on HIGH/CRITICAL findings that have a fix (`--ignore-unfixed` keeps the gate actionable).
+- **Security trade-offs:** the Docker socket is mounted, which makes Jenkins equivalent to root on Docker Desktop's VM. It's
+  mitigated by binding to `127.0.0.1` only and requiring login, and the jenkins user joins only the socket's group instead of
+  running as root. Builds run on the controller (2 executors), which Jenkins discourages for multi-user setups but is
+  acceptable for a single-user localhost instance. Some pinned plugins were only about a week old (configuration-as-code,
+  git, junit); they come from Jenkins' signed update centre.
+- **Alternatives:** Docker-in-Docker sidecar (also privileged, more moving parts), separate build agents (more resources),
+  GitHub Actions (simpler, but the brief requires Jenkins).

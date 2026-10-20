@@ -58,6 +58,18 @@ bash deploy/aws/destroy-server.sh                  # deletes the server and its 
   roughly $13/month of credits. A budget emails you if usage *before credits* passes 80% of $15 in a month.
   `create-server.sh` refuses to launch an instance type that isn't free-tier eligible.
 
+## CI (Jenkins, local)
+Jenkins runs in Docker on your PC, configured entirely from [`jenkins/`](jenkins/) (Configuration as Code), and polls GitHub every 3 minutes.
+The pipeline is the [`Jenkinsfile`](Jenkinsfile): install → lint + typecheck → unit tests → API tests on a throwaway
+PostgreSQL → builds → Docker images → Trivy scans (HIGH/CRITICAL with a fix available fail the build).
+```powershell
+New-Item -ItemType Directory -Force jenkins/secrets | Out-Null
+node -e "process.stdout.write(require('crypto').randomBytes(18).toString('base64url'))" > jenkins/secrets/admin_password
+docker compose -f jenkins/docker-compose.yml up -d --build
+# http://localhost:8080  →  user: admin, password: the contents of jenkins/secrets/admin_password
+```
+CI only runs while your PC (and Docker Desktop) is on. Deploys remain a deliberate step: `bash deploy/aws/deploy.sh <commit>`.
+
 ## Quick start (local development, Windows PowerShell)
 
 Prerequisites: Node.js 20+, Docker Desktop (running).

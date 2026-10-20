@@ -1,0 +1,44 @@
+# Local Jenkins for SplitSmart CI.
+#
+#   docker compose -f jenkins/docker-compose.yml up -d --build
+#   open http://localhost:8080  (user: admin, password: jenkins/secrets/admin_password)
+#
+# Security notes (ADR-022):
+#   - Bound to 127.0.0.1: only this PC can open Jenkins; nothing on your network or the internet can.
+#   - The Docker socket is mounted so pipelines can build images and start a test database.
+#     That makes Jenkins equivalent to root on Docker Desktop's VM, which is why it's localhost-only with a login.
+
+name: splitsmart-ci
+
+services:
+  jenkins:
+    build: .
+    image: splitsmart-jenkins:local
+    container_name: splitsmart-jenkins
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    secrets: [admin_password]
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Docker Desktop's socket is root:root, mode 660. Joining its group (gid 0) lets the jenkins user use
+    # Docker without running the whole Jenkins process as root.
+    group_add: ["0"]
+    # The pipeline's throwaway Postgres joins this network, so tests reach it by container name.
+    networks: [ci]
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password # git-ignored; create it before the first start (see README)
+
+networks:
+  ci:
+    name: splitsmart-ci
+
+volumes:
+  jenkins-home:

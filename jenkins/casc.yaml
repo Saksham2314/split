@@ -1,0 +1,56 @@
+# Jenkins Configuration as Code. Rebuilding the container recreates Jenkins exactly like this.
+# ${admin_password} is read from the Docker secret /run/secrets/admin_password (never stored in Git).
+
+jenkins:
+  systemMessage: "SplitSmart CI (local). Configured as code in jenkins/casc.yaml; edits made in the UI are lost on rebuild."
+  # Builds run on the controller itself: acceptable for a single-user, localhost-only Jenkins (ADR-022).
+  numExecutors: 2
+  mode: NORMAL
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          name: SplitSmart Admin
+          password: "${admin_password}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  crumbIssuer: "standard" # CSRF protection (always bound to the client IP in current Jenkins)
+  markupFormatter: plainText
+  disableRememberMe: true
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+  timestamper:
+    allPipelines: true
+
+# The pipeline job itself. The build steps live in the repo's Jenkinsfile.
+jobs:
+  - script: |
+      pipelineJob('splitsmart') {
+        description('CI for https://github.com/Saksham2314/split (main). Steps: Jenkinsfile in the repo.')
+        logRotator { numToKeep(30) }
+        properties {
+          disableConcurrentBuilds()
+          pipelineTriggers {
+            triggers {
+              // GitHub can't reach a laptop, so Jenkins polls instead of waiting for webhooks.
+              pollSCM { scmpoll_spec('H/3 * * * *') }
+            }
+          }
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote { url('https://github.com/Saksham2314/split.git') }
+                branch('*/main')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(true)
+          }
+        }
+      }
