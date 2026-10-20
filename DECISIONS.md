@@ -22,7 +22,7 @@ superseded ones are marked, not deleted. "Proposed" means agreed in planning but
 - **Consequences:** One commit SHA identifies a consistent version of the whole system. That fits SHA image tags.
 
 ## ADR-003 — Authentication: JWT in an httpOnly cookie, same-origin
-- **Status:** Proposed (implemented in Phase 1)
+- **Status:** Accepted (implemented Phase 1)
 - **Decision:** On login the API signs a short-lived JWT (HS256, 12 h) and sets it as a cookie with
   `HttpOnly`, `Secure` (in production), `SameSite=Lax`. Frontend and API share one origin through the
   reverse proxy. Passwords are hashed with **bcrypt** (cost 12).
@@ -38,13 +38,13 @@ superseded ones are marked, not deleted. "Proposed" means agreed in planning but
   denylist). The short expiry limits that window.
 
 ## ADR-004 — Money stored as integer paise
-- **Status:** Proposed (Phase 1)
+- **Status:** Accepted (implemented Phase 1)
 - **Decision:** All amounts are `BIGINT` paise (₹1 = 100). Equal splits put the remainder paise on the
   first participants in a fixed order, so the shares always add up exactly to the total.
 - **Alternatives:** `NUMERIC(12,2)` in Postgres (correct in the DB, but JS turns it into a float); JS floats (`0.1 + 0.2 !== 0.3`).
 
 ## ADR-005 — Plain SQL via `pg` + node-pg-migrate (no ORM)
-- **Status:** Proposed (Phase 1)
+- **Status:** Accepted (implemented Phase 1)
 - **Alternatives:** Prisma (great DX, but generated client + engine binary complicate slim images), Drizzle, Knex, TypeORM.
 - **Why:** Explicit SQL makes transactions, constraints and indexes easy to explain in an interview.
 - **Validation:** **zod** schemas on every request body.
@@ -100,3 +100,51 @@ superseded ones are marked, not deleted. "Proposed" means agreed in planning but
 - **Decision:** Local state file, git-ignored, backed up manually. Remote S3 state (with native S3 locking) is documented as
   the production upgrade and can be added if requested.
 - **Risk:** Losing the state file means Terraform "forgets" the resources. They keep running and billing, and you'd have to import or delete them by hand.
+
+## ADR-015 — Express 5, zod 4, Vitest projects, React Router
+- **Status:** Accepted (Phase 1)
+- **Decision:** Express 5 (async errors reach the error handler without wrappers), zod 4 for request validation,
+  Vitest with two projects (`unit` needs nothing; `api` runs Supertest against a real Postgres test database),
+  React Router for the SPA, `express-rate-limit` on login/register.
+- **Why a real database in API tests:** mocking the DB would skip constraints, foreign keys, transactions and SQL
+  bugs, which are exactly what we want to catch. The test setup wipes `splitsmart_test` and replays all migrations, which also
+  proves migrations work on a clean database.
+
+## ADR-016 — Authorization: membership check, 404 for outsiders, plus DB-level guarantees
+- **Status:** Accepted (Phase 1)
+- **Decision:** Every `/groups/:id/...` handler first loads the member list and returns 404 if the caller isn't in it.
+  Composite foreign keys (`(group_id, user_id) → group_members`) make Postgres itself reject a payer, participant or
+  settlement party who isn't a member. Deletes are scoped by `group_id` as well as `id`, which prevents IDOR
+  (insecure direct object reference) attacks.
+- **Trade-off:** 404 instead of 403 hides whether a group exists, but makes debugging slightly less obvious.
+
+## ADR-017 — Liveness vs readiness health endpoints
+- **Status:** Accepted (Phase 1)
+- **Decision:** `/api/health/live` answers if the process runs; `/api/health` also runs `SELECT 1` and returns 503 if the
+  DB is unreachable. Docker health checks and the deploy script (Phases 2/6) gate releases on readiness.
+
+## ADR-018 — Sign in with Google: server-side code flow + PKCE, no automatic account linking
+- **Status:** Accepted (Phase 1)
+- **Decision:** `/api/auth/google` redirects to Google with a random `state` and a PKCE S256 challenge, both kept in a
+  10-minute signed HttpOnly cookie scoped to `/api/auth/google`. The callback checks `state` (constant-time compare),
+  exchanges the code server-side, validates the ID token claims (`iss`, `aud`, `exp`, `email_verified`) and issues the
+  normal session cookie. Users are matched on Google's stable `sub` (new `users.google_sub` column), never on email alone.
+  The feature turns on only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. No new dependencies.
+- **ID token signature:** not verified against Google's JWKS. The token comes straight from Google's token endpoint over
+  TLS, which OpenID Connect Core §3.1.3.7 accepts as authenticating the issuer.
+- **No auto-linking:** if a *password* account already uses the same email, Google sign-in is refused (`email_exists`).
+  SplitSmart doesn't verify emails at sign-up, so someone could pre-register a victim's address with a password they
+  know. Auto-linking would then let them into the victim's account ("account pre-hijacking").
+- **Trade-off:** someone who signed up with a password can't later switch to Google for the same email. An
+  explicit "link Google" action while logged in would be the safe way to add that.
+
+## ADR-019 — UI motion: `motion` library, one shared vocabulary, reduced-motion aware
+- **Status:** Accepted (Phase 1)
+- **Decision:** `motion` (formerly Framer Motion), pinned to exactly 13.5.1. 14.x was only weeks old and changing fast,
+  so I picked a release that had been out a while (supply-chain caution). All animations draw from `apps/web/src/lib/motion.ts`:
+  three springs (snappy for presses, smooth for layout, bouncy for celebrations), a staggered "rise" entrance and a list
+  item enter/exit. Exits are faster than entrances. `<MotionConfig reducedMotion="user">` plus a CSS media query switch off
+  movement for users who ask their OS for reduced motion. Particles and click sparks are skipped entirely for them.
+- **Emojis are derived, not stored:** expense, group and avatar emojis come from keyword rules and id hashes
+  (`lib/emoji.ts`, unit-tested), so no schema change was needed.
+- **Cost:** about 100 kB more JS (157 kB gzipped in total). Acceptable for now. `LazyMotion` can cut it if load time matters later.

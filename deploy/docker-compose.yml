@@ -1,0 +1,34 @@
+# Local development stack.
+# Phase 1: only PostgreSQL (the API and web app run with `npm run dev` on the host).
+# Phase 2 adds the api, web and proxy containers.
+#
+# Start:  docker compose -f deploy/docker-compose.yml up -d
+# Stop:   docker compose -f deploy/docker-compose.yml down        (data is kept in the volume)
+# Wipe:   docker compose -f deploy/docker-compose.yml down -v     (deletes the database volume)
+
+name: splitsmart
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: splitsmart
+      # Local-only throwaway password; production gets a random one from SSM Parameter Store.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-splitsmart_dev}
+      POSTGRES_DB: splitsmart
+    ports:
+      # Bound to 127.0.0.1 so only this machine can connect, not others on your Wi-Fi.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Runs once on first start: creates the separate splitsmart_test database for automated tests.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U splitsmart -d splitsmart"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:
