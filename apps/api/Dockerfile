@@ -26,6 +26,8 @@ RUN --mount=type=cache,target=/root/.npm npm ci --workspace apps/api --omit=dev 
 # ---- runtime ----
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production PORT=3000
+# Pick up Alpine security fixes released after the base image was published (e.g. OpenSSL CVE-2026-14456).
+RUN apk upgrade --no-cache
 # The app is started with `node` directly, so the package managers are dead weight at runtime
 # and a common source of scanner findings (they bundle many dependencies of their own).
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
