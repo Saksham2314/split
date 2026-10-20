@@ -34,6 +34,16 @@ run in the cloud**: Docker, Terraform on AWS, a Jenkins CI/CD pipeline, HTTPS, m
 | [DECISIONS.md](DECISIONS.md) | Why each technology was chosen and what alternatives were rejected |
 | [PROGRESS.md](PROGRESS.md) | Current phase, test results, blockers |
 
+## Run the full stack in Docker (production-like)
+API, database and web all in containers, exactly as they will run on EC2. Open http://localhost afterwards.
+```powershell
+Copy-Item deploy/.env.example deploy/.env      # then set POSTGRES_PASSWORD and JWT_SECRET (see comments in the file)
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build --wait
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs -f     # follow logs
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down        # stop (data kept; add -v to wipe)
+```
+Start-up order: `db` (healthy) → `migrate` (applies SQL migrations, exits) → `api` (healthy) → `web` (Caddy on ports 80/443).
+
 ## Quick start (local development, Windows PowerShell)
 
 Prerequisites: Node.js 20+, Docker Desktop (running).

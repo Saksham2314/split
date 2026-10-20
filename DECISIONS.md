@@ -148,3 +148,19 @@ superseded ones are marked, not deleted. "Proposed" means agreed in planning but
 - **Emojis are derived, not stored:** expense, group and avatar emojis come from keyword rules and id hashes
   (`lib/emoji.ts`, unit-tested), so no schema change was needed.
 - **Cost:** about 100 kB more JS (157 kB gzipped in total). Acceptable for now. `LazyMotion` can cut it if load time matters later.
+
+## ADR-020 — Container layout: Caddy serves the web app and proxies the API; migrations as a one-off job
+- **Status:** Accepted (Phase 2). Refines ADR-006 and ADR-007.
+- **Decision:** Four Compose services: `db`, `migrate`, `api` and `web`. `web` is Caddy with the built React files baked in.
+  It serves them, reverse-proxies `/api/*` to `api:3000` and terminates HTTPS. `migrate` runs the API image with
+  `node dist/migrate.js up` and must exit 0 before `api` starts. Images are built from the repo root because the npm
+  workspaces share one lockfile.
+- **Alternatives:** separate nginx "web" and Caddy "proxy" containers (one more image and hop for no benefit). Running
+  migrations inside API start-up (every replica races to migrate, and a bad migration crash-loops the API).
+- **Isolation:** `backend` network is `internal: true` (db + api + migrate); `edge` network has Caddy + api. Only Caddy
+  publishes ports. The API keeps outbound internet (via `edge`) for Google's token endpoint. The DB has none.
+- **Hardening:** non-root API, read-only root filesystems, `cap_drop: ALL` (Caddy gets back only `NET_BIND_SERVICE`),
+  `no-new-privileges`, memory limits sized for a 1 GB instance, rotated json-file logs, npm/yarn deleted from the
+  runtime image. CSP allows `'unsafe-inline'` **styles only**, because Motion animates via inline style attributes. Scripts stay `'self'`.
+- **Known gaps:** base images pinned by tag, not digest (Phase 5 adds Trivy scanning and SHA-tagged app images).
+  Deleting npm doesn't shrink the image, because the files still exist in the base layer.

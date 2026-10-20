@@ -1,0 +1,109 @@
+# Full SplitSmart stack: PostgreSQL + one-off migrations + API + Caddy (web + reverse proxy + HTTPS).
+# Used for a production-like run locally (Phase 2) and on the EC2 host (Phase 4).
+#
+#   cp deploy/.env.example deploy/.env      # then fill in the secrets
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build --wait
+#
+# Startup order is enforced: db healthy → migrate exits 0 → api healthy → web.
+# A failing migration therefore stops the release instead of starting an API against the wrong schema.
+
+name: splitsmart-prod
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" } # bounded logs: a small EC2 disk can't fill up
+
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://splitsmart:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/splitsmart
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+  APP_URL: ${APP_URL:?set APP_URL}
+  TRUST_PROXY: "1" # exactly one proxy (Caddy) in front
+  COOKIE_SECURE: ${COOKIE_SECURE:-true}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  db:
+    <<: *hardening
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: splitsmart
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: splitsmart
+    # No `ports:` — the database is reachable only from the backend network, never from the host or internet.
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [backend]
+    shm_size: 128mb
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U splitsmart -d splitsmart"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    <<: *hardening
+    image: ${API_IMAGE:-splitsmart-api:local}
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    command: ["node", "dist/migrate.js", "up"]
+    restart: "no"
+    environment: *api-env
+    networks: [backend]
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 192m
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    <<: *hardening
+    image: ${API_IMAGE:-splitsmart-api:local}
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    init: true # tiny init as PID 1: forwards signals and reaps zombie processes
+    environment: *api-env
+    # backend: talks to db. edge: reached by Caddy, and outbound internet for Google sign-in.
+    networks: [backend, edge]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    stop_grace_period: 15s # server.ts drains in-flight requests for up to 10s on SIGTERM
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    <<: *hardening
+    image: ${WEB_IMAGE:-splitsmart-web:local}
+    build: { context: .., dockerfile: apps/web/Dockerfile }
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp" # HTTP/3
+    volumes:
+      - caddy-data:/data # TLS certificates and keys: must survive redeploys (Let's Encrypt rate limits)
+      - caddy-config:/config
+    networks: [edge]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE] # bind ports 80/443
+    mem_limit: 128m
+    depends_on:
+      api: { condition: service_healthy }
+
+networks:
+  backend:
+    internal: true # no route to the internet: the database can't call out
+  edge: {}
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

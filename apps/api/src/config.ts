@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// Docker Compose passes unset optional variables as "", which should mean "not configured".
+const optionalString = z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional());
+
 // All configuration comes from environment variables (12-factor app).
 // Parsing them once at startup means a missing or malformed value crashes
 // the process immediately with a clear message instead of failing later.
@@ -19,8 +22,8 @@ const EnvSchema = z.object({
   // Public origin the browser uses (Vite in dev, Caddy in production). OAuth redirects are built from it.
   APP_URL: z.url().default('http://localhost:5173'),
   // "Sign in with Google" is enabled only when both are set (Google Cloud Console → OAuth client).
-  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
-  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CLIENT_ID: optionalString,
+  GOOGLE_CLIENT_SECRET: optionalString,
 });
 
 export type Config = ReturnType<typeof loadConfig>;

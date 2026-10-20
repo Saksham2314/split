@@ -1,0 +1,51 @@
+# Caddy: serves the React app, forwards /api to the API container, and terminates HTTPS.
+#
+# SITE_ADDRESS decides the mode:
+#   :80                          plain HTTP (local prod-like run; no certificates)
+#   1-2-3-4.sslip.io / a domain  automatic HTTPS from Let's Encrypt, HTTP redirected to HTTPS
+
+{
+	# Admin API stays inside the container (the healthcheck uses it); never exposed via ports.
+	admin 127.0.0.1:2019
+}
+
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		# HSTS only has effect over HTTPS; browsers ignore it on plain HTTP.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Scripts only from our own origin. 'unsafe-inline' for styles is needed because the
+		# animation library sets inline style attributes (transforms, opacity) on elements.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:3000 {
+			# Fail fast to the client if the API is down, rather than hanging.
+			lb_try_duration 5s
+		}
+	}
+
+	handle {
+		root * /srv
+		# Hashed build assets never change, so browsers may cache them for a year.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		# index.html must always be revalidated so users pick up new releases immediately.
+		@html not path /assets/*
+		header @html Cache-Control "no-cache"
+		# Client-side routes (/groups/12) fall back to index.html.
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
